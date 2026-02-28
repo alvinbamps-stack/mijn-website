@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binnenkort Verwacht | Exclusief</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        /* CSS Reset & Variables */
+        :root {
+            --color-bg: #050505;
+            --color-text: #ffffff;
+            --color-accent: #ff3b3b;
+            --color-muted: #888888;
+            --font-display: 'Syne', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: none; /* Hide default cursor for custom cursor */
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: var(--font-body);
+            overflow: hidden; /* Prevent scrolling */
+        }
+
+        /* Grain overlay for texture */
+        .noise {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.04;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* WebGL Canvas */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Preloader */
+        .preloader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: opacity 1s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        .preloader.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-text {
+            font-family: var(--font-display);
+            font-size: 3vw;
+            font-weight: 700;
+            letter-spacing: 2px;
+            overflow: hidden;
+        }
+
+        .loader-percentage {
+            font-size: 1.2rem;
+            margin-top: 10px;
+            color: var(--color-muted);
+        }
+
+        /* Main Content Wrapper */
+        .main-content {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2.5rem 4rem;
+            opacity: 0; /* Hidden initially, revealed by JS */
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--color-accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        /* Hero Section */
+        .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-top: -5vh;
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 8vw, 10rem);
+            line-height: 0.9;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+
+        /* Text Reveal Animation Prep */
+        .line-wrap {
+            overflow: hidden;
+            display: block;
+        }
+
+        .line {
+            display: block;
+            transform: translateY(110%);
+            transition: transform 1.2s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .ready .line {
+            transform: translateY(0);
+        }
+
+        .delay-1 { transition-delay: 0.1s; }
+        .delay-2 { transition-delay: 0.2s; }
+        .delay-3 { transition-delay: 0.3s; }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 1.5vw, 1.5rem);
+            color: var(--color-muted);
+            max-width: 500px;
+            line-height: 1.5;
+            margin-bottom: 3rem;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 1s ease, transform 1s ease;
+            transition-delay: 0.5s;
+        }
+
+        .ready .hero-subtitle {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Newsletter Form */
+        .newsletter-form {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 1s ease, transform 1s ease;
+            transition-delay: 0.7s;
+        }
+
+        .ready .newsletter-form {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        input[type="email"] {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--color-text);
+            font-family: var(--font-body);
+            font-size: 1.1rem;
+            padding: 10px 0;
+            width: 300px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="email"]:focus {
+            border-bottom-color: var(--color-text);
+        }
+
+        input[type="email"]::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        button.submit-btn {
+            background: transparent;
+            border: none;
+            color: var(--color-text);
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            padding: 10px 0;
+            overflow: hidden;
+        }
+
+        button.submit-btn::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: var(--color-accent);
+            transform: translateX(-100%);
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        button.submit-btn.hovered::after {
+            transform: translateX(0);
+        }
+
+        /* Footer */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            font-size: 0.9rem;
+            color: var(--color-muted);
+        }
+
+        .social-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .magnetic-link {
+            color: var(--color-text);
+            text-decoration: none;
+            text-transform: uppercase;
+            font-weight: 500;
+            letter-spacing: 1px;
+            display: inline-block;
+            transition: color 0.3s ease;
+        }
+
+        /* Custom Cursor */
+        .cursor {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #fff;
+            mix-blend-mode: difference;
+            pointer-events: none;
+            z-index: 99999;
+            transform: translate(-50%, -50%);
+            transition: width 0.3s ease, height 0.3s ease, background-color 0.3s ease;
+        }
+
+        .cursor.active {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 1);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 59, 59, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content { padding: 2rem; }
+            .hero-title { font-size: 3.5rem; }
+            .newsletter-form { flex-direction: column; align-items: flex-start; gap: 30px; }
+            input[type="email"] { width: 100%; }
+            footer { flex-direction: column; align-items: flex-start; gap: 20px; }
+            .cursor { display: none; } /* Disable custom cursor on mobile */
+            * { cursor: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Texture Overlay -->
+    <div class="noise"></div>
+
+    <!-- Preloader -->
+    <div class="preloader" id="preloader">
+        <div class="loader-text">LADEN</div>
+        <div class="loader-percentage" id="loader-perc">0%</div>
+    </div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor" id="cursor"></div>
+
+    <!-- ThreeJS Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+        <header>
+            <div class="logo">Studio<br>Nova.</div>
+            <div class="status">
+                <div class="status-dot"></div>
+                Binnenkort Online
+            </div>
+        </header>
+
+        <section class="hero">
+            <h1 class="hero-title">
+                <span class="line-wrap"><span class="line delay-1">Iets</span></span>
+                <span class="line-wrap"><span class="line delay-2">Buitengewoons</span></span>
+                <span class="line-wrap"><span class="line delay-3">Komt Eraan.</span></span>
+            </h1>
+            <p class="hero-subtitle">We creëren momenteel een compleet nieuwe digitale ervaring. Laat je e-mailadres achter om als eerste toegang te krijgen.</p>
+            
+            <form class="newsletter-form" onsubmit="event.preventDefault(); alert('Bedankt! Je bent toegevoegd aan de lijst.');">
+                <div class="input-group">
+                    <input type="email" placeholder="Jouw e-mailadres" required class="hover-target">
+                </div>
+                <button type="submit" class="submit-btn hover-target">Ontdek als eerste</button>
+            </form>
+        </section>
+
+        <footer>
+            <div class="copyright">&copy; 2026 Studio Nova. Alle rechten voorbehouden.</div>
+            <div class="social-links">
+                <a href="#" class="magnetic-link hover-target">Instagram</a>
+                <a href="#" class="magnetic-link hover-target">Twitter</a>
+                <a href="#" class="magnetic-link hover-target">LinkedIn</a>
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        // --- PRELOADER LOGIC ---
+        const preloader = document.getElementById('preloader');
+        const loaderPerc = document.getElementById('loader-perc');
+        const mainContent = document.getElementById('main-content');
+        
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.floor(Math.random() * 10) + 1;
+            if (progress >= 100) {
+                progress = 100;
+                clearInterval(interval);
+                
+                // Animate out preloader
+                setTimeout(() => {
+                    preloader.classList.add('hide');
+                    mainContent.style.opacity = '1';
+                    
+                    // Trigger Text Reveals
+                    setTimeout(() => {
+                        mainContent.classList.add('ready');
+                    }, 100);
+
+                }, 500);
+            }
+            loaderPerc.innerText = `${progress}%`;
+        }, 80);
+
+
+        // --- CUSTOM CURSOR LOGIC ---
+        const cursor = document.getElementById('cursor');
+        const hoverTargets = document.querySelectorAll('.hover-target, .magnetic-link, button');
+
+        // Check if device is touchable, if so disable custom cursor logic
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+        if (!isTouchDevice) {
+            let mouseX = 0;
+            let mouseY = 0;
+            let cursorX = 0;
+            let cursorY = 0;
+
+            // Smooth cursor follow
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
+            function renderCursor() {
+                // Lerp formula for smoothness
+                cursorX += (mouseX - cursorX) * 0.2;
+                cursorY += (mouseY - cursorY) * 0.2;
+                
+                cursor.style.transform = `translate(${cursorX - 10}px, ${cursorY - 10}px)`;
+                requestAnimationFrame(renderCursor);
+            }
+            renderCursor();
+
+            // Cursor hover states
+            hoverTargets.forEach(target => {
+                target.addEventListener('mouseenter', () => {
+                    cursor.classList.add('active');
+                    if(target.classList.contains('submit-btn')) {
+                        target.classList.add('hovered');
+                    }
+                });
+                target.addEventListener('mouseleave', () => {
+                    cursor.classList.remove('active');
+                    if(target.classList.contains('submit-btn')) {
+                        target.classList.remove('hovered');
+                    }
+                });
+            });
+
+            // Magnetic effect for social links
+            const magneticLinks = document.querySelectorAll('.magnetic-link');
+            magneticLinks.forEach(link => {
+                link.addEventListener('mousemove', (e) => {
+                    const rect = link.getBoundingClientRect();
+                    const x = e.clientX - rect.left - rect.width / 2;
+                    const y = e.clientY - rect.top - rect.height / 2;
+                    
+                    link.style.transform = `translate(${x * 0.3}px, ${y * 0.3}px)`;
+                });
+
+                link.addEventListener('mouseleave', () => {
+                    link.style.transform = `translate(0px, 0px)`;
+                });
+            });
+        }
+
+
+        // --- THREE.JS BACKGROUND LOGIC ---
+        // Creating an interactive particle wave
+        const container = document.getElementById('canvas-container');
+        
+        const scene = new THREE.Scene();
+        // Fog to blend particles into the dark background
+        scene.fog = new THREE.FogExp2(0x050505, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.z = 400;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x050505, 1);
+        container.appendChild(renderer.domElement);
+
+        // Variables for particles
+        const amountX = 50;
+        const amountY = 50;
+        const separation = 40;
+        let particles, count = 0;
+
+        // Mouse interaction for WebGL
+        let webglMouseX = 0;
+        let webglMouseY = 0;
+        let windowHalfX = window.innerWidth / 2;
+        let windowHalfY = window.innerHeight / 2;
+
+        initParticles();
+
+        function initParticles() {
+            const numParticles = amountX * amountY;
+            const positions = new Float32Array(numParticles * 3);
+            const scales = new Float32Array(numParticles);
+
+            let i = 0, j = 0;
+
+            for (let ix = 0; ix < amountX; ix++) {
+                for (let iy = 0; iy < amountY; iy++) {
+                    positions[i] = ix * separation - ((amountX * separation) / 2); // x
+                    positions[i + 1] = 0; // y
+                    positions[i + 2] = iy * separation - ((amountY * separation) / 2); // z
+                    
+                    scales[j] = 1;
+                    
+                    i += 3;
+                    j++;
+                }
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('scale', new THREE.BufferAttribute(scales, 1));
+
+            // Custom shader material for soft glowing particles
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    color: { value: new THREE.Color(0xffffff) },
+                },
+                vertexShader: `
+                    attribute float scale;
+                    void main() {
+                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                        gl_PointSize = scale * (300.0 / -mvPosition.z);
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 color;
+                    void main() {
+                        if (length(gl_PointCoord - vec2(0.5, 0.5)) > 0.475) discard;
+                        gl_FragColor = vec4(color, 0.3); // Opacity
+                    }
+                `,
+                transparent: true
+            });
+
+            particles = new THREE.Points(geometry, material);
+            // Angle the wave slightly
+            particles.rotation.x = 0.2;
+            scene.add(particles);
+
+            if (!isTouchDevice) {
+                document.addEventListener('mousemove', onDocumentMouseMove, false);
+            } else {
+                document.addEventListener('touchmove', onDocumentTouchMove, false);
+            }
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onDocumentMouseMove(event) {
+            webglMouseX = event.clientX - windowHalfX;
+            webglMouseY = event.clientY - windowHalfY;
+        }
+
+        function onDocumentTouchMove(event) {
+            if (event.touches.length === 1) {
+                webglMouseX = event.touches[0].pageX - windowHalfX;
+                webglMouseY = event.touches[0].pageY - windowHalfY;
+            }
+        }
+
+        function animateWebGL() {
+            requestAnimationFrame(animateWebGL);
+            renderWebGL();
+        }
+
+        function renderWebGL() {
+            // Parallax camera movement based on mouse
+            camera.position.x += (webglMouseX * 0.5 - camera.position.x) * 0.05;
+            camera.position.y += (-webglMouseY * 0.5 - camera.position.y) * 0.05;
+            camera.lookAt(scene.position);
+
+            const positions = particles.geometry.attributes.position.array;
+            const scales = particles.geometry.attributes.scale.array;
+
+            let i = 0, j = 0;
+
+            // Create the wave effect using Math.sin
+            for (let ix = 0; ix < amountX; ix++) {
+                for (let iy = 0; iy < amountY; iy++) {
+                    positions[i + 1] = (Math.sin((ix + count) * 0.3) * 50) +
+                                       (Math.sin((iy + count) * 0.5) * 50);
+
+                    scales[j] = (Math.sin((ix + count) * 0.3) + 1) * 2 +
+                                (Math.sin((iy + count) * 0.5) + 1) * 2;
+
+                    i += 3;
+                    j++;
+                }
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+            particles.geometry.attributes.scale.needsUpdate = true;
+
+            renderer.render(scene, camera);
+            count += 0.05; // Speed of the wave
+        }
+
+        // Start WebGL Loop
+        window.onload = function() {
+            animateWebGL();
+        };
+
+    </script>
+</body>
+</html>
